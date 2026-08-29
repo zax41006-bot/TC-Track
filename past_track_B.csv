@@ -54,4 +54,4 @@ datetime,lat,lng,intensity,wind,minimum central pressure,type
 29/08/2026 17:00,26.9,114.6,TD,55,998,past
 29/08/2026 20:00,26.6,113.6,TD,55,998,past
 29/08/2026 23:00,26.1,112.9,TD,55,998,past
-30/08/2026 02:00,25.6,112.3,TD,55,998,current 
+30/08/2026 02:00,25.6,112.3,TD,45,998,current 
