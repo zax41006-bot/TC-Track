@@ -94,7 +94,6 @@
             margin-bottom: 6px; font-size: 14px; color: #2c3e50;
         }
 
-        /* ===== 修改点：将 768px 改为 1024px，使 iPad 也使用手机版布局 ===== */
         @media screen and (max-width: 1024px) {
             .header b { font-size: 13px; }
             .radar-ui { bottom: 220px; width: 240px; padding: 10px; }
@@ -339,8 +338,14 @@ async function drawSingleTC(tcId) {
         const fText = await fetchCSVData(`${githubBaseUrl}/forecast_track_${tcId}.csv`);
         
         const pastData = parseCSV(pText);
-        const forecastData = parseCSV(fText);
-        
+
+        // 【修正】全部預報節點都用來繪製路徑與誤差帶，但只按時次排序
+        const forecastData = parseCSV(fText)
+            .sort((a, b) => Number(a.f_time) - Number(b.f_time));
+
+        // 【修正】需顯示節點的時次集合：12, 24, 36, 48, 60, 72, 96, 120
+        const visibleHours = new Set([12, 24, 36, 48, 60, 72, 96, 120]);
+
         if(pastData.length === 0) {
             tcDistances[tcId] = null;
             return [];
@@ -390,9 +395,11 @@ async function drawSingleTC(tcId) {
 
         L.circleMarker([latestPoint.lat, latestPoint.lng], { radius: 8, fillColor: intensityColors[latestPoint.intensity] || intensityColors.default, color: "#000", weight:2.5, fillOpacity:1 }).addTo(trackLayer).bindPopup(createPopupContent(latestPoint, 'current')).bringToFront();
 
-        forecastData.forEach(d => 
+        // 【修正】只為 12/24/36/48/60/72/96/120 這幾個時次繪製節點圓點，其餘節點隱藏
+        forecastData.forEach(d => {
+            if (!visibleHours.has(Number(d.f_time))) return;
             L.circleMarker([d.lat, d.lng], { radius: 5, fillColor: intensityColors[d.intensity] || intensityColors.default, color: "#333", weight:1, fillOpacity:0.8 }).addTo(trackLayer).bindPopup(createPopupContent(d, 'forecast', baseTimeStr))
-        );
+        });
 
         return pastData.map(d=>[d.lat, d.lng]).concat(fPath);
     } catch (e) {
