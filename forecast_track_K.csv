@@ -8,8 +8,8 @@
 42hr,22.0,126.5,TS,75,995,forecast
 48hr,22.5,126.0,TS,85,990,forecast
 54hr,23.0,126.0,STS,90,985,forecast
-60hr,23.5,126.5,STS,110,980,forecast
-66hr,24.0,126.8,TY,130,970,forecast
+60hr,23.5,126.2,STS,110,980,forecast
+66hr,24.0,126.6,TY,130,970,forecast
 72hr,24.5,127.0,STY,150,955,forecast
 78hr,25.0,127.5,STY,150,955,forecast
 84hr,25.5,128.0,TY,145,960,forecast
