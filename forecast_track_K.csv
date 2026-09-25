@@ -10,9 +10,9 @@
 54hr,25.5,128.5,STY,175,940,forecast
 60hr,26.0,129.0,STY,175,940,forecast
 66hr,26.5,129.5,STY,175,940,forecast
-72hr,26.7,129.7,STY,175,940,forecast
-78hr,26.9,129.9,STY,165,945,forecast
-84hr,27.1,130.1,STY,155,950,forecast
+72hr,26.7,129.7,STY,165,945,forecast
+78hr,26.9,129.9,STY,155,950,forecast
+84hr,27.1,130.1,TY,145,960,forecast
 90hr,27.3,130.3,TY,140,965,forecast
 96hr,27.5,130.5,TY,120,975,forecast
 102hr,27.7,130.7,STS,105,980,forecast
