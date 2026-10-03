@@ -1,2 +1,3 @@
 datetime,lat,lng,intensity,wind,minimum central pressure,type
-03/10/2026 20:00,8.3,167.4,TD,55,1005,current
+03/10/2026 20:00,8.3,167.4,TD,55,1005,past
+04/10/2026 02:00,8.4,166.9,TD,55,1005,current
