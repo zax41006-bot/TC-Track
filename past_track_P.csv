@@ -16,4 +16,5 @@ datetime,lat,lng,intensity,wind,minimum central pressure,type
 17/10/2026 20:00,12.5,146.1,SUTY,195,930,past
 18/10/2026 02:00,13.1,144.7,SUTY,205,925,past
 18/10/2026 08:00,13.1,143.6,SUTY,260,905,past
-18/10/2026 14:00,13.0,142.2,SUTY,230,915,current
+18/10/2026 14:00,13.0,142.2,SUTY,230,915,past
+18/10/2026 20:00,13.4,141.5,SUTY,220,920,current
