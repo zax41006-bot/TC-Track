@@ -101,7 +101,6 @@
     <div style="display: flex; align-items: center;">
         <select id="tc-selector" onchange="init()">
             <option value="all" selected>所有熱帶氣旋</option>
-            <option value="P">薔琵</option>
             <option value="Q">煙花</option>
         </select>
     </div>
@@ -171,8 +170,8 @@
 </div>
 
 <script>
-const TC_LIST = ['P','Q'];
-const TC_DISPLAY_NAMES = { 'P': '薔琵', 'Q': '煙花' };
+const TC_LIST = ['Q'];
+const TC_DISPLAY_NAMES = { 'Q': '煙花' };
 
 // ==================== 坐標轉換工具 (GCJ-02 轉 WGS84) ====================
 // 用於解決阿里雲邊界數據在 WGS84 底圖上的偏移問題
