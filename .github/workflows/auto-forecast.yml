@@ -1,0 +1,180 @@
+name: Auto Forecast, Deploy & TG (TC-Track)
+
+on:
+  push:
+    paths:
+      # 🌟 只監聽這三個數據檔案，改了才觸發
+      - 'forecast_track_*.csv'
+      - 'past_track_*.csv'
+      - 'notice_*.txt'
+      - 'notice.txt'
+  workflow_dispatch: # 允許手動測試
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-plot:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install requests pandas numpy matplotlib scipy shapely cartopy tcmarkers
+
+    - name: Install Chinese Fonts
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y fonts-wqy-microhei
+
+    # 1. 執行畫圖腳本 (生成主圖與局部圖)
+    - name: Run plot script
+      run: python plot_all_tc.py
+
+    # 2. 將生成的圖片推回倉庫 (這會讓 HKMO_TC 網頁自動更新)
+    - name: Commit and push updated plots
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git add output/*.png
+        git add output/last_sent_hash.txt 2>/dev/null || true
+        
+        if ! git diff --cached --quiet; then
+          git fetch origin main
+          git reset --soft origin/main
+          git add output/*.png
+          git add output/last_sent_hash.txt 2>/dev/null || true
+          git commit -m "chore: auto-update TC plots [skip ci]"
+          git push
+        else
+          echo "圖片無變化，不提交"
+        fi
+
+    # 3. 發送到 Telegram (精準識別 past, forecast, notice 的 Hash)
+    - name: Send TC forecast to Telegram
+      env:
+        BOT_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+        CHAT_ID: ${{ secrets.TELEGRAM_TO }}
+        EVENT_NAME: ${{ github.event_name }} 
+      run: |
+        cat << 'EOF' > send_tg.py
+        import requests, json, os, sys, math, pandas as pd, hashlib
+        from io import StringIO
+        
+        token = os.environ.get('BOT_TOKEN')
+        chat_id = os.environ.get('CHAT_ID')
+        is_manual = os.environ.get('EVENT_NAME') == 'workflow_dispatch'
+        
+        HASH_FILE = "output/last_sent_hash.txt"
+        MACAU_COORDS = (22.17, 113.55)
+        HK_COORDS = (22.3193, 114.1694)
+        
+        def haversine(lat1, lon1, lat2, lon2):
+            R = 6371.0
+            dlat = math.radians(lat2 - lat1)
+            dlon = math.radians(lon2 - lon1)
+            a = math.sin(dlat / 2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2)**2
+            c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+            return R * c
+            
+        with open('tc_config.json', 'r', encoding='utf-8-sig') as f:
+            tc_list = json.load(f)
+            
+        combined_data_str = ""
+        data_cache = {}
+        
+        # 🌟 核心邏輯：精準讀取 past, forecast, notice 的內容來算 Hash
+        for tc in tc_list:
+            tc_id = tc['id']
+            p_text, f_text, n_text = "", "", ""
+            
+            if os.path.exists(f"past_track_{tc_id}.csv"):
+                with open(f"past_track_{tc_id}.csv", 'r', encoding='utf-8-sig') as f: p_text = f.read()
+            if os.path.exists(f"forecast_track_{tc_id}.csv"):
+                with open(f"forecast_track_{tc_id}.csv", 'r', encoding='utf-8-sig') as f: f_text = f.read()
+            if os.path.exists(f"notice_{tc_id}.txt"):
+                with open(f"notice_{tc_id}.txt", 'r', encoding='utf-8') as f: n_text = f.read()
+            elif os.path.exists("notice.txt"):
+                with open("notice.txt", 'r', encoding='utf-8') as f: n_text = f.read()
+                    
+            # 把這三個檔案的內容拼起來
+            combined_data_str += p_text + f_text + n_text
+            data_cache[tc_id] = {'past': p_text, 'notice': n_text}
+                
+        current_hash = hashlib.md5(combined_data_str.encode('utf-8')).hexdigest()
+        old_hash = ""
+        if os.path.exists(HASH_FILE):
+            with open(HASH_FILE, 'r') as f: old_hash = f.read().strip()
+                
+        # 如果不是手動，且這三個檔案內容完全沒變，直接罷工！
+        if not is_manual and current_hash == old_hash:
+            print("💤 數據無任何變化 (Hash 相同)，跳過發送。")
+            sys.exit(0)
+            
+        print(f"🔔 檢測到 past/forecast/notice 有更新，開始發送...")
+        os.makedirs("output", exist_ok=True)
+        
+        for tc in tc_list:
+            tc_id = tc['id']
+            tc_name = tc['name']
+            image_path = f'output/forecast_{tc_id}.png'
+            
+            if not os.path.exists(image_path):
+                print(f'❌ [{tc_id}] 找不到圖片 {image_path}')
+                continue
+                
+            # 發送主圖
+            caption = data_cache.get(tc_id, {}).get('notice', '')
+            if len(caption) > 1000: caption = caption[:1000] + '\n...(截斷)'
+                    
+            url_photo = f'https://api.telegram.org/bot{token}/sendPhoto'
+            with open(image_path, 'rb') as photo:
+                print(f'🚀 [{tc_id}] 正在發送主預報圖...')
+                resp = requests.post(url_photo, files={'photo': photo}, data={'chat_id': chat_id, 'caption': caption})
+                if resp.status_code != 200:
+                    print(f'❌ [{tc_id}] 圖片發送失敗: {resp.text}'); sys.exit(1)
+                else: print(f'✅ [{tc_id}] 圖片發送成功！')
+                    
+            # 發送距離報文
+            try:
+                past_csv_text = data_cache.get(tc_id, {}).get('past', '')
+                if past_csv_text:
+                    df = pd.read_csv(StringIO(past_csv_text))
+                    df.columns = df.columns.str.strip().str.lower()
+                    
+                    curr_row = df[df['type'].astype(str).str.lower() == 'current']
+                    if not curr_row.empty:
+                        current_lat = float(curr_row.iloc[0]['lat'])
+                        current_lng = float(curr_row.iloc[0]['lng'])
+                    else:
+                        current_lat = float(df.iloc[-1]['lat'])
+                        current_lng = float(df.iloc[-1]['lng'])
+                    
+                    if (105.0 <= current_lng <= 135.0) and (10.0 <= current_lat <= 30.0):
+                        dist_macau = haversine(MACAU_COORDS[0], MACAU_COORDS[1], current_lat, current_lng)
+                        dist_hk = haversine(HK_COORDS[0], HK_COORDS[1], current_lat, current_lng)
+                        round_macau = int(round(dist_macau / 10.0)) * 10
+                        round_hk = int(round(dist_hk / 10.0)) * 10
+                        
+                        msg_text = f"熱帶氣旋「{tc_name}」距離香港：{round_hk}公里，距離澳門：{round_macau}公里"
+                        url_msg = f'https://api.telegram.org/bot{token}/sendMessage'
+                        print(f'📝 [{tc_id}] 正在發送距離報文: {msg_text}')
+                        resp_msg = requests.post(url_msg, json={'chat_id': chat_id, 'text': msg_text})
+                        if resp_msg.status_code != 200: print(f'❌ [{tc_id}] 距離報文發送失敗: {resp_msg.text}')
+                        else: print(f'✅ [{tc_id}] 距離報文發送成功！')
+            except Exception as e:
+                print(f"⚠️ [{tc_id}] 計算或發送距離報文失敗: {e}")
+                
+        with open(HASH_FILE, 'w') as f: f.write(current_hash)
+        print("💾 已更新防重複 Hash 檔案。")
+        EOF
+        python send_tg.py
