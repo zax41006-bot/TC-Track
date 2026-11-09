@@ -282,8 +282,8 @@ def draw_chart(tc_data):
         in_range_wide = (105.0 <= curr_lon <= 135.0) and (10.0 <= curr_lat <= 30.0)
         if in_range_wide:
             print("🌊 氣旋實時位置進入港澳關注範圍(105-135, 10-30)，開始生成局部圖...")
-            # 局部圖視野固定為 102-138, 7-33
-            extent_wide = (102.0, 138.0, 7.0, 33.0)
+            # 地圖範圍固定顯示 102-138, 7-37
+            extent_wide = (102.0, 138.0, 7.0, 37.0)
             draw_local_map(tc_name, tc_id, past_data, forecast_data, base_time, "澳門", MACAO_COORDS, target_hours, curr, extent_wide)
             draw_local_map(tc_name, tc_id, past_data, forecast_data, base_time, "香港", HK_COORDS, target_hours, curr, extent_wide)
         else:
@@ -298,6 +298,7 @@ def draw_chart(tc_data):
         in_range_close = (110.0 <= curr_lon <= 125.0) and (15.0 <= curr_lat <= 25.0)
         if in_range_close:
             print("⚠️ 氣旋實時位置進入港澳核心關注範圍(110-125, 15-25)，開始生成近距離局部圖...")
+            # 地圖範圍固定顯示 107-127, 12.5-27.5
             extent_close = (107.0, 127.0, 12.5, 27.5)
             draw_local_map(tc_name, tc_id, past_data, forecast_data, base_time, "澳門", MACAO_COORDS, target_hours, curr, extent_close, suffix="_close")
             draw_local_map(tc_name, tc_id, past_data, forecast_data, base_time, "香港", HK_COORDS, target_hours, curr, extent_close, suffix="_close")
