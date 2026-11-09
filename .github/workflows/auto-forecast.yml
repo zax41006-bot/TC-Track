@@ -120,8 +120,9 @@ jobs:
             tc_id = tc['id']
             tc_name = tc['name']
             
-            # 1. 計算距離報文
-            msg_text = ""
+            # ==================== 計算距離 ====================
+            dist_msg_macau = ""
+            dist_msg_hk = ""
             try:
                 past_csv_text = data_cache.get(tc_id, {}).get('past', '')
                 if past_csv_text:
@@ -141,20 +142,20 @@ jobs:
                         dist_hk = haversine(HK_COORDS[0], HK_COORDS[1], current_lat, current_lng)
                         round_macau = int(round(dist_macau / 10.0)) * 10
                         round_hk = int(round(dist_hk / 10.0)) * 10
-                        msg_text = f"\n\n📍 距離香港：{round_hk}公里\n📍 距離澳門：{round_macau}公里"
+                        
+                        # 分別準備兩地的距離文字
+                        dist_msg_macau = f"\n\n📍 距離澳門：{round_macau}公里"
+                        dist_msg_hk = f"\n\n📍 距離香港：{round_hk}公里"
             except Exception as e:
                 print(f"⚠️ [{tc_id}] 計算距離失敗: {e}")
 
-            # 2. 發送主圖
+            # ==================== 1. 發送主圖 (僅搭配 notice) ====================
             image_path = f'output/forecast_{tc_id}.png'
             if os.path.exists(image_path):
                 notice_text = data_cache.get(tc_id, {}).get('notice', '').strip()
                 if len(notice_text) > 900: notice_text = notice_text[:900] + '...'
                 
                 caption = notice_text
-                if msg_text:
-                    caption += msg_text if caption else msg_text.strip()
-                    
                 url_photo = f'https://api.telegram.org/bot{token}/sendPhoto'
                 with open(image_path, 'rb') as photo:
                     print(f'🚀 [{tc_id}] 正在發送主預報圖...')
@@ -162,20 +163,23 @@ jobs:
                     if resp.status_code != 200: print(f'❌ [{tc_id}] 主圖發送失敗: {resp.text}')
                     else: print(f'✅ [{tc_id}] 主圖發送成功！')
             
-            # 3. 發送所有局部圖 (利用 glob 自動抓取 _澳門.png, _香港.png, _澳門_close.png 等)
+            # ==================== 2. 發送局部圖 (分別附上對應距離) ====================
             local_imgs = glob.glob(f'output/forecast_{tc_id}_*.png')
             for local_img in sorted(local_imgs):
-                if '_close' in local_img:
-                    city_name = '澳門' if '澳門' in local_img else '香港'
-                    caption_text = f"⚠️ 熱帶氣旋「{tc_name}」近距離對{city_name}威脅圖"
-                else:
-                    city_name = '澳門' if '澳門' in local_img else '香港'
-                    caption_text = f"🌀 熱帶氣旋「{tc_name}」對{city_name}威脅圖"
+                city_name = '澳門' if '澳門' in local_img else '香港'
                 
-                if msg_text:
-                    caption_text += msg_text
+                if '_close' in local_img:
+                    caption_text = f"⚠️ 熱帶氣旋「{tc_name}」近距離路徑預報圖[{city_name}]"
+                else:
+                    caption_text = f"🌀 熱帶氣旋「{tc_name}」路徑預報圖[{city_name}]"
+                
+                # 根據城市附加不同的距離文字
+                if city_name == '澳門':
+                    caption_text += dist_msg_macau
+                else:
+                    caption_text += dist_msg_hk
 
-                print(f'🚀 [{tc_id}] 正在發送局部威脅圖: {os.path.basename(local_img)}...')
+                print(f'🚀 [{tc_id}] 正在發送局部圖: {os.path.basename(local_img)}...')
                 with open(local_img, 'rb') as lp:
                     resp_local = requests.post(url_photo, files={'photo': lp}, data={'chat_id': chat_id, 'caption': caption_text})
                     if resp_local.status_code == 200:
