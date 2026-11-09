@@ -166,7 +166,7 @@ def draw_local_map(tc_name, tc_id, past_data, forecast_data, base_time, city_nam
     os.makedirs("output", exist_ok=True)
     out_path = f"output/forecast_{tc_id}_{city_name}{suffix}.png"
     
-    # 【修改點】將 dpi 從 120 提升到 250，讓圖片更清晰銳利
+    # DPI 設為 250 保持清晰
     plt.savefig(out_path, dpi=250, bbox_inches='tight')
     
     plt.close(fig)
@@ -275,32 +275,34 @@ def draw_chart(tc_data):
         print(f"✅ {tc_name} ({tc_id}) 主預報圖已生成至 {out_path}")
 
         # ==================== 判斷並生成局部圖 ====================
-        all_coords = [(float(curr[1]), float(curr[2]))] + [(float(d[1]), float(d[2])) for d in forecast_data]
+        curr_lon = float(curr[1])
+        curr_lat = float(curr[2])
         
-        # 1. 外圍範圍：102-138, 7-33
-        in_range_wide = any(102.0 <= lon <= 138.0 and 7.0 <= lat <= 33.0 for lon, lat in all_coords)
+        # 1. 外圍範圍：判斷「實時位置」是否在 105-135, 10-30
+        in_range_wide = (105.0 <= curr_lon <= 135.0) and (10.0 <= curr_lat <= 30.0)
         if in_range_wide:
-            print("🌊 氣旋進入港澳關注範圍(102-138, 7-33)，開始生成局部圖...")
+            print("🌊 氣旋實時位置進入港澳關注範圍(105-135, 10-30)，開始生成局部圖...")
+            # 局部圖視野固定為 102-138, 7-33
             extent_wide = (102.0, 138.0, 7.0, 33.0)
             draw_local_map(tc_name, tc_id, past_data, forecast_data, base_time, "澳門", MACAO_COORDS, target_hours, curr, extent_wide)
             draw_local_map(tc_name, tc_id, past_data, forecast_data, base_time, "香港", HK_COORDS, target_hours, curr, extent_wide)
         else:
-            print("💤 氣旋未進入港澳關注範圍(102-138, 7-33)，跳過局部圖生成。")
+            print("💤 氣旋實時位置未進入港澳關注範圍(105-135, 10-30)，跳過局部圖生成並刪除舊圖。")
             for city in ["澳門", "香港"]:
                 old_path = f"output/forecast_{tc_id}_{city}.png"
                 if os.path.exists(old_path):
                     os.remove(old_path)
                     print(f"🗑️ 已刪除過期的局部圖: {old_path}")
 
-        # 2. 核心範圍：110-125, 15-25
-        in_range_close = any(110.0 <= lon <= 125.0 and 15.0 <= lat <= 25.0 for lon, lat in all_coords)
+        # 2. 核心範圍：判斷「實時位置」是否在 110-125, 15-25
+        in_range_close = (110.0 <= curr_lon <= 125.0) and (15.0 <= curr_lat <= 25.0)
         if in_range_close:
-            print("⚠️ 氣旋進入港澳核心關注範圍(110-125, 15-25)，開始生成近距離局部圖...")
+            print("⚠️ 氣旋實時位置進入港澳核心關注範圍(110-125, 15-25)，開始生成近距離局部圖...")
             extent_close = (107.0, 127.0, 12.5, 27.5)
             draw_local_map(tc_name, tc_id, past_data, forecast_data, base_time, "澳門", MACAO_COORDS, target_hours, curr, extent_close, suffix="_close")
             draw_local_map(tc_name, tc_id, past_data, forecast_data, base_time, "香港", HK_COORDS, target_hours, curr, extent_close, suffix="_close")
         else:
-            print("💤 氣旋未進入港澳核心關注範圍(110-125, 15-25)，跳過近距離局部圖生成。")
+            print("💤 氣旋實時位置未進入港澳核心關注範圍(110-125, 15-25)，跳過近距離局部圖生成並刪除舊圖。")
             for city in ["澳門", "香港"]:
                 old_path = f"output/forecast_{tc_id}_{city}_close.png"
                 if os.path.exists(old_path):
