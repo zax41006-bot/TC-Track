@@ -165,7 +165,10 @@ def draw_local_map(tc_name, tc_id, past_data, forecast_data, base_time, city_nam
     plt.subplots_adjust(bottom=0.05, top=0.88)
     os.makedirs("output", exist_ok=True)
     out_path = f"output/forecast_{tc_id}_{city_name}{suffix}.png"
-    plt.savefig(out_path, dpi=120, bbox_inches='tight')
+    
+    # 【修改點】將 dpi 從 120 提升到 250，讓圖片更清晰銳利
+    plt.savefig(out_path, dpi=250, bbox_inches='tight')
+    
     plt.close(fig)
     print(f"✅ 生成局部圖: {out_path}")
 
