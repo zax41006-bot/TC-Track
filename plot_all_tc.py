@@ -18,7 +18,6 @@ from matplotlib.lines import Line2D
 import tcmarkers
 
 # ==================== 全局設定 ====================
-# 如果本地沒有 CSV，會當作備用去這裡抓
 SITE_BASE_URL = "https://raw.githubusercontent.com/zax41006-bot/TC-Track/main"
 
 plt.rcParams["font.sans-serif"] = ["SimHei", "WenQuanYi Micro Hei", "Microsoft YaHei"]
@@ -71,27 +70,26 @@ def setup_base_map(ax, lon_min, lon_max, lat_min, lat_max, is_local=False):
         gl.xlocator = mticker.MultipleLocator(5)
         gl.ylocator = mticker.MultipleLocator(5)
 
-def draw_local_map(tc_name, tc_id, past_data, forecast_data, base_time, city_name, city_coords, target_hours, curr):
-    # 經度跨度 36 (102-138)，緯度跨度 26 (7-33)，將 figsize 設為 10.5 x 8 以保持比例協調
-    fig, ax = plt.subplots(figsize=(10.5, 8), subplot_kw={'projection': ccrs.PlateCarree()})
+def draw_local_map(tc_name, tc_id, past_data, forecast_data, base_time, city_name, city_coords, target_hours, curr, extent, suffix=""):
+    # 根據傳入的範圍，動態決定 figsize 比例
+    lon_min, lon_max, lat_min, lat_max = extent
+    span_lon = lon_max - lon_min
+    span_lat = lat_max - lat_min
+    width = 10.5 if span_lon > 30 else 9
+    fig, ax = plt.subplots(figsize=(width, 8), subplot_kw={'projection': ccrs.PlateCarree()})
+    
     lon_c, lat_c = city_coords
-    
-    # ==================== 固定局部圖範圍 ====================
-    lon_min, lon_max = 102.0, 138.0
-    lat_min, lat_max = 7.0, 33.0
-    # ========================================================
-    
     setup_base_map(ax, lon_min, lon_max, lat_min, lat_max, is_local=True)
     
     gd = Geodesic()
     radii = [800, 600, 400, 200, 100]
-    # 將警戒圈設為統一灰色 ('#888888')
     circle_colors = ['#888888', '#888888', '#888888', '#888888', '#888888']
     
     for r, color in zip(radii, circle_colors):
         circle = gd.circle(lon=lon_c, lat=lat_c, radius=r*1000, n_samples=100)
         ax.add_patch(plt.Polygon(circle, facecolor='none', edgecolor=color, linestyle='--', linewidth=1.5, zorder=4, transform=ccrs.PlateCarree()))
-        ax.text(lon_c, lat_c + (r/111.0), f'{r}km', color=color, fontsize=10, fontweight='bold', ha='center', va='bottom', zorder=5, transform=ccrs.PlateCarree())
+        # 警戒圈文字移到南邊
+        ax.text(lon_c, lat_c - (r/111.0), f'{r}km', color=color, fontsize=10, fontweight='bold', ha='center', va='top', zorder=5, transform=ccrs.PlateCarree())
 
     ax.plot(lon_c, lat_c, marker='*', color='red', markersize=15, zorder=10, transform=ccrs.PlateCarree())
     ax.text(lon_c + 0.5, lat_c - 0.5, city_name, fontsize=14, fontweight='bold', color='red', va='center', zorder=10, transform=ccrs.PlateCarree())
@@ -106,6 +104,22 @@ def draw_local_map(tc_name, tc_id, past_data, forecast_data, base_time, city_nam
     ax.plot(curr[1], curr[2], marker=tcmarkers.HU, ms=14, color=get_intensity_color(curr[5]), mec='k', zorder=11)
 
     if forecast_data:
+        # 誤差帶
+        f_hs = [d[4] for d in forecast_data]
+        all_h = [0] + f_hs
+        all_ln = [float(curr[1])] + [float(d[1]) for d in forecast_data]
+        all_lt = [float(curr[2])] + [float(d[2]) for d in forecast_data]
+        all_er = [0] + [((h // 24) * 100 + (h % 24) * (100 / 24)) * (1 / 111) for h in f_hs]
+        
+        ih = np.linspace(0, max(all_h), 100)
+        xi = PchipInterpolator(all_h, all_ln)(ih)
+        yi = PchipInterpolator(all_h, all_lt)(ih)
+        ri = PchipInterpolator(all_h, all_er)(ih)
+        
+        ps = [Polygon(np.dstack((xi[i] + ri[i] * np.cos(np.linspace(0, 2 * np.pi, 360)), yi[i] + ri[i] * np.sin(np.linspace(0, 2 * np.pi, 360))))[0]) for i in range(len(ih))]
+        ax.add_geometries([unary_union([MultiPolygon([ps[i], ps[i + 1]]).convex_hull for i in range(len(ps) - 1)])], 
+                          ccrs.PlateCarree(), fc="#d1d1d1", alpha=0.5, ec="#707070", lw=0.7, zorder=4)
+
         f_lngs = [curr[1]] + [d[1] for d in forecast_data]
         f_lats = [curr[2]] + [d[2] for d in forecast_data]
         ax.plot(f_lngs, f_lats, color="#002a7d", lw=2.5, ls='--', zorder=5)
@@ -119,7 +133,7 @@ def draw_local_map(tc_name, tc_id, past_data, forecast_data, base_time, city_nam
     
     plt.subplots_adjust(bottom=0.05, top=0.88)
     os.makedirs("output", exist_ok=True)
-    out_path = f"output/forecast_{tc_id}_{city_name}.png"
+    out_path = f"output/forecast_{tc_id}_{city_name}{suffix}.png"
     plt.savefig(out_path, dpi=120, bbox_inches='tight')
     plt.close(fig)
     print(f"✅ 生成局部圖: {out_path}")
@@ -143,7 +157,6 @@ def draw_chart(tc_data):
         df_past = pd.read_csv(past_url)
         df_past.columns = df_past.columns.str.strip()
         
-        # 尋找 current 實時定位
         past_data = df_past[['datetime', 'lng', 'lat', 'wind', 'minimum central pressure', 'intensity', 'type']].values.tolist()
         curr = None
         for row in past_data:
@@ -228,21 +241,37 @@ def draw_chart(tc_data):
         print(f"✅ {tc_name} ({tc_id}) 主預報圖已生成至 {out_path}")
 
         # ==================== 判斷並生成局部圖 ====================
-        # 判斷氣旋是否進入 102-138, 7-33 範圍
         all_coords = [(float(curr[1]), float(curr[2]))] + [(float(d[1]), float(d[2])) for d in forecast_data]
-        in_range = any(102.0 <= lon <= 138.0 and 7.0 <= lat <= 33.0 for lon, lat in all_coords)
         
-        if in_range:
-            print("🌊 氣旋進入港澳關注範圍，開始生成局部圖...")
-            draw_local_map(tc_name, tc_id, past_data, forecast_data, base_time, "澳門", MACAO_COORDS, target_hours, curr)
-            draw_local_map(tc_name, tc_id, past_data, forecast_data, base_time, "香港", HK_COORDS, target_hours, curr)
+        # 1. 外圍範圍：102-138, 7-33
+        in_range_wide = any(102.0 <= lon <= 138.0 and 7.0 <= lat <= 33.0 for lon, lat in all_coords)
+        if in_range_wide:
+            print("🌊 氣旋進入港澳關注範圍(102-138, 7-33)，開始生成局部圖...")
+            extent_wide = (102.0, 138.0, 7.0, 33.0)
+            draw_local_map(tc_name, tc_id, past_data, forecast_data, base_time, "澳門", MACAO_COORDS, target_hours, curr, extent_wide)
+            draw_local_map(tc_name, tc_id, past_data, forecast_data, base_time, "香港", HK_COORDS, target_hours, curr, extent_wide)
         else:
-            print("💤 氣旋未進入港澳關注範圍，跳過局部圖生成。")
+            print("💤 氣旋未進入港澳關注範圍(102-138, 7-33)，跳過局部圖生成。")
             for city in ["澳門", "香港"]:
                 old_path = f"output/forecast_{tc_id}_{city}.png"
                 if os.path.exists(old_path):
                     os.remove(old_path)
                     print(f"🗑️ 已刪除過期的局部圖: {old_path}")
+
+        # 2. 核心範圍：110-125, 15-25
+        in_range_close = any(110.0 <= lon <= 125.0 and 15.0 <= lat <= 25.0 for lon, lat in all_coords)
+        if in_range_close:
+            print("⚠️ 氣旋進入港澳核心關注範圍(110-125, 15-25)，開始生成近距離局部圖...")
+            extent_close = (107.0, 127.0, 12.5, 27.5)
+            draw_local_map(tc_name, tc_id, past_data, forecast_data, base_time, "澳門", MACAO_COORDS, target_hours, curr, extent_close, suffix="_close")
+            draw_local_map(tc_name, tc_id, past_data, forecast_data, base_time, "香港", HK_COORDS, target_hours, curr, extent_close, suffix="_close")
+        else:
+            print("💤 氣旋未進入港澳核心關注範圍(110-125, 15-25)，跳過近距離局部圖生成。")
+            for city in ["澳門", "香港"]:
+                old_path = f"output/forecast_{tc_id}_{city}_close.png"
+                if os.path.exists(old_path):
+                    os.remove(old_path)
+                    print(f"🗑️ 已刪除過期的近距離局部圖: {old_path}")
         
     except Exception as e:
         print(f"❌ {tc_name} ({tc_id}) 繪圖失敗: {e}")
