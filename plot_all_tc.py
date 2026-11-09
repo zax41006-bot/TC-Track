@@ -128,7 +128,7 @@ def draw_local_map(tc_name, tc_id, past_data, forecast_data, base_time, city_nam
             # 預報位置 ICON
             ax.plot(d[1], d[2], marker=tcmarkers.HU, ms=5.5, color=get_intensity_color(d[6]), mec='k', mew=0.4, zorder=10)
 
-    # ==================== 新增：在圖內下方繪製圖例 ====================
+    # ==================== 在圖內下方繪製圖例 ====================
     leg_core = [
         Line2D([0], [0], color="black", lw=2, label='過去路徑'),
         Line2D([0], [0], color="#002a7d", lw=2.5, ls='--', label='預報路徑'),
@@ -139,23 +139,29 @@ def draw_local_map(tc_name, tc_id, past_data, forecast_data, base_time, city_nam
         for k in ["LPA", "TD", "TS", "STS", "TY", "STY", "SUTY"]
     ]
     
-    # 將兩組圖例合併，放在圖框內部正下方 (loc='lower center')
+    # 將兩組圖例合併，放在圖框內部正下方
     ax.legend(handles=leg_core + leg_int, 
               loc='lower center', 
-              bbox_to_anchor=(0.5, 0.02), # 0.02 表示距離下邊框非常近
-              ncol=5, # 分成 5 列顯示
+              bbox_to_anchor=(0.5, 0.02), 
+              ncol=5, 
               fontsize=9.5, 
               frameon=True, 
               edgecolor='#CFD8DC', 
               facecolor='white', 
               framealpha=0.95,
               prop={'weight':'bold'})
+
+    # ==================== 標題與右上角浮水印 ====================
+    max_forecast_hr = max([d[4] for d in forecast_data]) if forecast_data else 0
+    
+    fig.text(0.5, 0.94, f"熱帶氣旋「{tc_name}」路徑預報圖[{city_name}]", ha='center', fontsize=18, fontweight='bold')
+    # 修改為 預報時效
+    fig.text(0.5, 0.90, f"預報時效：{max_forecast_hr}小時", ha='center', fontsize=13, fontweight='bold', color='#222222')
+    
+    # 新增右上角發佈單位
+    ax.text(0.98, 0.98, "港澳天氣站 HKMO_MET 製作", transform=ax.transAxes, ha='right', va='top', fontsize=12, fontweight='bold', color='#003399', bbox=dict(boxstyle="round,pad=0.3", fc="white", alpha=0.9, ec="none"), zorder=20)
     # ==========================================================
 
-    # 標題
-    fig.text(0.5, 0.94, f"熱帶氣旋「{tc_name}」路徑預報圖[{city_name}]", ha='center', fontsize=18, fontweight='bold')
-    fig.text(0.5, 0.90, f"{base_time.strftime('%d/%m/%Y %H:%M')} 更新", ha='center', fontsize=12, color='#555')
-    
     plt.subplots_adjust(bottom=0.05, top=0.88)
     os.makedirs("output", exist_ok=True)
     out_path = f"output/forecast_{tc_id}_{city_name}{suffix}.png"
