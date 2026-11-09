@@ -67,7 +67,7 @@ jobs:
         EVENT_NAME: ${{ github.event_name }} 
       run: |
         cat << 'EOF' > send_tg.py
-        import requests, json, os, sys, math, pandas as pd, hashlib
+        import requests, json, os, sys, math, pandas as pd, hashlib, time
         from io import StringIO
         
         token = os.environ.get('BOT_TOKEN')
@@ -129,10 +129,10 @@ jobs:
             image_path = f'output/forecast_{tc_id}.png'
             
             if not os.path.exists(image_path):
-                print(f'❌ [{tc_id}] 找不到圖片 {image_path}')
+                print(f'❌ [{tc_id}] 找不到主圖 {image_path}')
                 continue
                 
-            # 發送主圖
+            # 發送主圖 (caption 附帶 notice 內容)
             caption = data_cache.get(tc_id, {}).get('notice', '')
             if len(caption) > 1000: caption = caption[:1000] + '\n...(截斷)'
                     
@@ -141,9 +141,27 @@ jobs:
                 print(f'🚀 [{tc_id}] 正在發送主預報圖...')
                 resp = requests.post(url_photo, files={'photo': photo}, data={'chat_id': chat_id, 'caption': caption})
                 if resp.status_code != 200:
-                    print(f'❌ [{tc_id}] 圖片發送失敗: {resp.text}'); sys.exit(1)
-                else: print(f'✅ [{tc_id}] 圖片發送成功！')
-                    
+                    print(f'❌ [{tc_id}] 圖片發送失敗: {resp.text}')
+                    # 避免全面崩潰，這裡改為不退出，繼續嘗試其他颱風
+                else: 
+                    print(f'✅ [{tc_id}] 圖片發送成功！')
+            
+            # ==================== 新增：發送局部威脅圖 ====================
+            for city in ["澳門", "香港"]:
+                local_img = f'output/forecast_{tc_id}_{city}.png'
+                # 只有當檔案存在（即氣旋進入 102-138, 7-33 範圍）時才發送
+                if os.path.exists(local_img):
+                    local_caption = f"🌀 熱帶氣旋「{tc_name}」對{city}威脅圖"
+                    print(f'🚀 [{tc_id}] 正在發送{city}局部威脅圖...')
+                    with open(local_img, 'rb') as lp:
+                        resp_local = requests.post(url_photo, files={'photo': lp}, data={'chat_id': chat_id, 'caption': local_caption})
+                        if resp_local.status_code == 200:
+                            print(f'✅ [{tc_id}] {city}局部圖發送成功！')
+                        else:
+                            print(f'❌ [{tc_id}] {city}局部圖發送失敗: {resp_local.text}')
+                    time.sleep(1) # 稍微延遲防止 Telegram 限流
+            # ==========================================================
+
             # 發送距離報文
             try:
                 past_csv_text = data_cache.get(tc_id, {}).get('past', '')
