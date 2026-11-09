@@ -223,7 +223,7 @@ def draw_chart(tc_data):
 
         # ==================== 判斷並生成局部圖 ====================
         all_coords = [(float(curr[1]), float(curr[2]))] + [(float(d[1]), float(d[2])) for d in forecast_data]
-        in_range = any(105.0 <= lon <= 135.0 and 10.0 <= lat <= 30.0 for lon, lat in all_coords)
+        in_range = any(102.0 <= lon <= 138.0 and 7.0 <= lat <= 33.0 for lon, lat in all_coords)
         
         if in_range:
             print("🌊 氣旋進入港澳關注範圍，開始生成局部圖...")
