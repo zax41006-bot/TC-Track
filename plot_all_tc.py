@@ -72,15 +72,21 @@ def setup_base_map(ax, lon_min, lon_max, lat_min, lat_max, is_local=False):
         gl.ylocator = mticker.MultipleLocator(5)
 
 def draw_local_map(tc_name, tc_id, past_data, forecast_data, base_time, city_name, city_coords, target_hours, curr):
-    fig, ax = plt.subplots(figsize=(8, 8), subplot_kw={'projection': ccrs.PlateCarree()})
+    # 經度跨度 36 (102-138)，緯度跨度 26 (7-33)，將 figsize 設為 10.5 x 8 以保持比例協調
+    fig, ax = plt.subplots(figsize=(10.5, 8), subplot_kw={'projection': ccrs.PlateCarree()})
     lon_c, lat_c = city_coords
-    lon_min, lon_max = lon_c - 12, lon_c + 12
-    lat_min, lat_max = lat_c - 10, lat_c + 10
+    
+    # ==================== 固定局部圖範圍 ====================
+    lon_min, lon_max = 102.0, 138.0
+    lat_min, lat_max = 7.0, 33.0
+    # ========================================================
+    
     setup_base_map(ax, lon_min, lon_max, lat_min, lat_max, is_local=True)
     
     gd = Geodesic()
     radii = [800, 600, 400, 200, 100]
-    circle_colors = ['#FF0000', '#FF8C00', '#FFD700', '#32CD32', '#00BFFF']
+    # 將警戒圈設為統一灰色 ('#888888')
+    circle_colors = ['#888888', '#888888', '#888888', '#888888', '#888888']
     
     for r, color in zip(radii, circle_colors):
         circle = gd.circle(lon=lon_c, lat=lat_c, radius=r*1000, n_samples=100)
@@ -222,6 +228,7 @@ def draw_chart(tc_data):
         print(f"✅ {tc_name} ({tc_id}) 主預報圖已生成至 {out_path}")
 
         # ==================== 判斷並生成局部圖 ====================
+        # 判斷氣旋是否進入 102-138, 7-33 範圍
         all_coords = [(float(curr[1]), float(curr[2]))] + [(float(d[1]), float(d[2])) for d in forecast_data]
         in_range = any(102.0 <= lon <= 138.0 and 7.0 <= lat <= 33.0 for lon, lat in all_coords)
         
