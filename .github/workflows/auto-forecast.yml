@@ -3,12 +3,11 @@ name: Auto Forecast, Deploy & TG (TC-Track)
 on:
   push:
     paths:
-      # 🌟 只監聽這三個數據檔案，改了才觸發
       - 'forecast_track_*.csv'
       - 'past_track_*.csv'
       - 'notice_*.txt'
       - 'notice.txt'
-  workflow_dispatch: # 允許手動測試
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -36,11 +35,9 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y fonts-wqy-microhei
 
-    # 1. 執行畫圖腳本 (生成主圖與局部圖)
     - name: Run plot script
       run: python plot_all_tc.py
 
-    # 2. 將生成的圖片推回倉庫 (這會讓 HKMO_TC 網頁自動更新)
     - name: Commit and push updated plots
       run: |
         git config user.name "github-actions[bot]"
@@ -59,7 +56,6 @@ jobs:
           echo "圖片無變化，不提交"
         fi
 
-    # 3. 發送到 Telegram (精準識別 past, forecast, notice 的 Hash)
     - name: Send TC forecast to Telegram
       env:
         BOT_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
@@ -67,7 +63,7 @@ jobs:
         EVENT_NAME: ${{ github.event_name }} 
       run: |
         cat << 'EOF' > send_tg.py
-        import requests, json, os, sys, math, pandas as pd, hashlib, time
+        import requests, json, os, sys, math, pandas as pd, hashlib, time, glob
         from io import StringIO
         
         token = os.environ.get('BOT_TOKEN')
@@ -92,7 +88,6 @@ jobs:
         combined_data_str = ""
         data_cache = {}
         
-        # 🌟 核心邏輯：精準讀取 past, forecast, notice 的內容來算 Hash
         for tc in tc_list:
             tc_id = tc['id']
             p_text, f_text, n_text = "", "", ""
@@ -106,7 +101,6 @@ jobs:
             elif os.path.exists("notice.txt"):
                 with open("notice.txt", 'r', encoding='utf-8') as f: n_text = f.read()
                     
-            # 把這三個檔案的內容拼起來
             combined_data_str += p_text + f_text + n_text
             data_cache[tc_id] = {'past': p_text, 'notice': n_text}
                 
@@ -115,7 +109,6 @@ jobs:
         if os.path.exists(HASH_FILE):
             with open(HASH_FILE, 'r') as f: old_hash = f.read().strip()
                 
-        # 如果不是手動，且這三個檔案內容完全沒變，直接罷工！
         if not is_manual and current_hash == old_hash:
             print("💤 數據無任何變化 (Hash 相同)，跳過發送。")
             sys.exit(0)
@@ -126,43 +119,9 @@ jobs:
         for tc in tc_list:
             tc_id = tc['id']
             tc_name = tc['name']
-            image_path = f'output/forecast_{tc_id}.png'
             
-            if not os.path.exists(image_path):
-                print(f'❌ [{tc_id}] 找不到主圖 {image_path}')
-                continue
-                
-            # 發送主圖 (caption 附帶 notice 內容)
-            caption = data_cache.get(tc_id, {}).get('notice', '')
-            if len(caption) > 1000: caption = caption[:1000] + '\n...(截斷)'
-                    
-            url_photo = f'https://api.telegram.org/bot{token}/sendPhoto'
-            with open(image_path, 'rb') as photo:
-                print(f'🚀 [{tc_id}] 正在發送主預報圖...')
-                resp = requests.post(url_photo, files={'photo': photo}, data={'chat_id': chat_id, 'caption': caption})
-                if resp.status_code != 200:
-                    print(f'❌ [{tc_id}] 圖片發送失敗: {resp.text}')
-                    # 避免全面崩潰，這裡改為不退出，繼續嘗試其他颱風
-                else: 
-                    print(f'✅ [{tc_id}] 圖片發送成功！')
-            
-            # ==================== 新增：發送局部威脅圖 ====================
-            for city in ["澳門", "香港"]:
-                local_img = f'output/forecast_{tc_id}_{city}.png'
-                # 只有當檔案存在（即氣旋進入 102-138, 7-33 範圍）時才發送
-                if os.path.exists(local_img):
-                    local_caption = f"🌀 熱帶氣旋「{tc_name}」對{city}威脅圖"
-                    print(f'🚀 [{tc_id}] 正在發送{city}局部威脅圖...')
-                    with open(local_img, 'rb') as lp:
-                        resp_local = requests.post(url_photo, files={'photo': lp}, data={'chat_id': chat_id, 'caption': local_caption})
-                        if resp_local.status_code == 200:
-                            print(f'✅ [{tc_id}] {city}局部圖發送成功！')
-                        else:
-                            print(f'❌ [{tc_id}] {city}局部圖發送失敗: {resp_local.text}')
-                    time.sleep(1) # 稍微延遲防止 Telegram 限流
-            # ==========================================================
-
-            # 發送距離報文
+            # 1. 計算距離報文
+            msg_text = ""
             try:
                 past_csv_text = data_cache.get(tc_id, {}).get('past', '')
                 if past_csv_text:
@@ -182,15 +141,48 @@ jobs:
                         dist_hk = haversine(HK_COORDS[0], HK_COORDS[1], current_lat, current_lng)
                         round_macau = int(round(dist_macau / 10.0)) * 10
                         round_hk = int(round(dist_hk / 10.0)) * 10
-                        
-                        msg_text = f"熱帶氣旋「{tc_name}」距離香港：{round_hk}公里，距離澳門：{round_macau}公里"
-                        url_msg = f'https://api.telegram.org/bot{token}/sendMessage'
-                        print(f'📝 [{tc_id}] 正在發送距離報文: {msg_text}')
-                        resp_msg = requests.post(url_msg, json={'chat_id': chat_id, 'text': msg_text})
-                        if resp_msg.status_code != 200: print(f'❌ [{tc_id}] 距離報文發送失敗: {resp_msg.text}')
-                        else: print(f'✅ [{tc_id}] 距離報文發送成功！')
+                        msg_text = f"\n\n📍 距離香港：{round_hk}公里\n📍 距離澳門：{round_macau}公里"
             except Exception as e:
-                print(f"⚠️ [{tc_id}] 計算或發送距離報文失敗: {e}")
+                print(f"⚠️ [{tc_id}] 計算距離失敗: {e}")
+
+            # 2. 發送主圖
+            image_path = f'output/forecast_{tc_id}.png'
+            if os.path.exists(image_path):
+                notice_text = data_cache.get(tc_id, {}).get('notice', '').strip()
+                if len(notice_text) > 900: notice_text = notice_text[:900] + '...'
+                
+                caption = notice_text
+                if msg_text:
+                    caption += msg_text if caption else msg_text.strip()
+                    
+                url_photo = f'https://api.telegram.org/bot{token}/sendPhoto'
+                with open(image_path, 'rb') as photo:
+                    print(f'🚀 [{tc_id}] 正在發送主預報圖...')
+                    resp = requests.post(url_photo, files={'photo': photo}, data={'chat_id': chat_id, 'caption': caption})
+                    if resp.status_code != 200: print(f'❌ [{tc_id}] 主圖發送失敗: {resp.text}')
+                    else: print(f'✅ [{tc_id}] 主圖發送成功！')
+            
+            # 3. 發送所有局部圖 (利用 glob 自動抓取 _澳門.png, _香港.png, _澳門_close.png 等)
+            local_imgs = glob.glob(f'output/forecast_{tc_id}_*.png')
+            for local_img in sorted(local_imgs):
+                if '_close' in local_img:
+                    city_name = '澳門' if '澳門' in local_img else '香港'
+                    caption_text = f"⚠️ 熱帶氣旋「{tc_name}」近距離對{city_name}威脅圖"
+                else:
+                    city_name = '澳門' if '澳門' in local_img else '香港'
+                    caption_text = f"🌀 熱帶氣旋「{tc_name}」對{city_name}威脅圖"
+                
+                if msg_text:
+                    caption_text += msg_text
+
+                print(f'🚀 [{tc_id}] 正在發送局部威脅圖: {os.path.basename(local_img)}...')
+                with open(local_img, 'rb') as lp:
+                    resp_local = requests.post(url_photo, files={'photo': lp}, data={'chat_id': chat_id, 'caption': caption_text})
+                    if resp_local.status_code == 200:
+                        print(f'✅ [{tc_id}] {os.path.basename(local_img)} 發送成功！')
+                    else:
+                        print(f'❌ [{tc_id}] {os.path.basename(local_img)} 發送失敗: {resp_local.text}')
+                time.sleep(1) # 防止限流
                 
         with open(HASH_FILE, 'w') as f: f.write(current_hash)
         print("💾 已更新防重複 Hash 檔案。")
