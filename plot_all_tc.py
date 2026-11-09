@@ -71,10 +71,8 @@ def setup_base_map(ax, lon_min, lon_max, lat_min, lat_max, is_local=False):
         gl.ylocator = mticker.MultipleLocator(5)
 
 def draw_local_map(tc_name, tc_id, past_data, forecast_data, base_time, city_name, city_coords, target_hours, curr, extent, suffix=""):
-    # 根據傳入的範圍，動態決定 figsize 比例
     lon_min, lon_max, lat_min, lat_max = extent
     span_lon = lon_max - lon_min
-    span_lat = lat_max - lat_min
     width = 10.5 if span_lon > 30 else 9
     fig, ax = plt.subplots(figsize=(width, 8), subplot_kw={'projection': ccrs.PlateCarree()})
     
@@ -101,7 +99,8 @@ def draw_local_map(tc_name, tc_id, past_data, forecast_data, base_time, city_nam
     for d in past_data[:-1]:
         ax.plot(d[1], d[2], marker='o', ms=4, markerfacecolor=get_intensity_color(d[5]), markeredgecolor='black', zorder=6)
         
-    ax.plot(curr[1], curr[2], marker=tcmarkers.HU, ms=14, color=get_intensity_color(curr[5]), mec='k', zorder=11)
+    # 【修改】當前位置 ICON 設為 6.5，與主圖完全一致
+    ax.plot(curr[1], curr[2], marker=tcmarkers.HU, ms=6.5, color=get_intensity_color(curr[5]), mec='k', mew=0.5, zorder=11)
 
     if forecast_data:
         # 誤差帶
@@ -126,9 +125,11 @@ def draw_local_map(tc_name, tc_id, past_data, forecast_data, base_time, city_nam
         
         for d in forecast_data:
             if d[4] not in target_hours: continue
-            ax.plot(d[1], d[2], marker=tcmarkers.HU, ms=9, color=get_intensity_color(d[6]), mec='k', zorder=10)
+            # 【修改】預報位置 ICON 設為 5.5，與主圖完全一致
+            ax.plot(d[1], d[2], marker=tcmarkers.HU, ms=5.5, color=get_intensity_color(d[6]), mec='k', mew=0.4, zorder=10)
 
-    fig.text(0.5, 0.94, f"熱帶氣旋「{tc_name}」對{city_name}威脅圖", ha='center', fontsize=18, fontweight='bold')
+    # 標題
+    fig.text(0.5, 0.94, f"熱帶氣旋「{tc_name}」路徑預報圖[{city_name}]", ha='center', fontsize=18, fontweight='bold')
     fig.text(0.5, 0.90, f"{base_time.strftime('%d/%m/%Y %H:%M')} 更新", ha='center', fontsize=12, color='#555')
     
     plt.subplots_adjust(bottom=0.05, top=0.88)
