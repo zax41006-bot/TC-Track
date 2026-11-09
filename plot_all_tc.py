@@ -99,7 +99,7 @@ def draw_local_map(tc_name, tc_id, past_data, forecast_data, base_time, city_nam
     for d in past_data[:-1]:
         ax.plot(d[1], d[2], marker='o', ms=4, markerfacecolor=get_intensity_color(d[5]), markeredgecolor='black', zorder=6)
         
-    # 【修改】當前位置 ICON 設為 6.5，與主圖完全一致
+    # 當前位置 ICON
     ax.plot(curr[1], curr[2], marker=tcmarkers.HU, ms=6.5, color=get_intensity_color(curr[5]), mec='k', mew=0.5, zorder=11)
 
     if forecast_data:
@@ -125,8 +125,32 @@ def draw_local_map(tc_name, tc_id, past_data, forecast_data, base_time, city_nam
         
         for d in forecast_data:
             if d[4] not in target_hours: continue
-            # 【修改】預報位置 ICON 設為 5.5，與主圖完全一致
+            # 預報位置 ICON
             ax.plot(d[1], d[2], marker=tcmarkers.HU, ms=5.5, color=get_intensity_color(d[6]), mec='k', mew=0.4, zorder=10)
+
+    # ==================== 新增：在圖內下方繪製圖例 ====================
+    leg_core = [
+        Line2D([0], [0], color="black", lw=2, label='過去路徑'),
+        Line2D([0], [0], color="#002a7d", lw=2.5, ls='--', label='預報路徑'),
+        plt.Rectangle((0, 0), 1, 1, fc="#d1d1d1", alpha=0.5, ec="#707070", lw=0.7, label='預報誤差')
+    ]
+    leg_int = [
+        Line2D([0], [0], marker=tcmarkers.HU, c=INTENSITY_CONFIG[k]["color"], label=INTENSITY_CONFIG[k]["cn"], ms=7.0, mec='k', mew=0.5, ls='') 
+        for k in ["LPA", "TD", "TS", "STS", "TY", "STY", "SUTY"]
+    ]
+    
+    # 將兩組圖例合併，放在圖框內部正下方 (loc='lower center')
+    ax.legend(handles=leg_core + leg_int, 
+              loc='lower center', 
+              bbox_to_anchor=(0.5, 0.02), # 0.02 表示距離下邊框非常近
+              ncol=5, # 分成 5 列顯示
+              fontsize=9.5, 
+              frameon=True, 
+              edgecolor='#CFD8DC', 
+              facecolor='white', 
+              framealpha=0.95,
+              prop={'weight':'bold'})
+    # ==========================================================
 
     # 標題
     fig.text(0.5, 0.94, f"熱帶氣旋「{tc_name}」路徑預報圖[{city_name}]", ha='center', fontsize=18, fontweight='bold')
